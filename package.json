@@ -1,0 +1,24 @@
+{
+  "name": "aplocator",
+  "version": "1.0.0",
+  "description": "Webscrapper to search apartments avaliable to location on specific website.",
+  "main": ".bin/server.js",
+  "scripts": {
+    "test": "test",
+    "run": "node ./app/app.js",
+    "start": "node ./bin/server.js"
+  },
+  "keywords": [
+    "web",
+    "scrapper",
+    "webscrapper",
+    "puppeteer"
+  ],
+  "author": "Leandro Fernandes",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.1",
+    "node-telegram-bot-api": "^0.57.0",
+    "puppeteer": "^14.0.0"
+  }
+}
