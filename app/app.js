@@ -1,5 +1,7 @@
 const puppeteer = require('puppeteer');
-const TelegramBot = require("node-telegram-bot-api");
+const { setIntervalAsync } = require("set-interval-async/fixed");
+const { clearIntervalAsync } = require("set-interval-async");
+const bridge = require('../bin/bot');
 
 const filtroModel = {
     local0:['brasilia','guara'],
@@ -11,14 +13,31 @@ const filtroModel = {
 }
 
 const searchModel = [
-	["brasilia", "asa-norte/", "shcgn", 50, [1600, 2300], 2]
-	,["brasilia", "asa-norte/", "sqn 216", 50, [1600, 2400], 2]
-	,["brasilia", "asa-norte/", "sqn 416", 50, [1600, 2400], 2]
-	,["brasilia", "asa-norte/", "shcgn 716", 50, [1600, 2300], 2]
+	["brasilia", "asa-norte/", "703", 50, [1600, 2500], 2],
+	//["brasilia", "asa-norte/", "sqn", 50, [1600, 2500], 2],
+	["brasilia", "asa-norte/", "sqn 416", 50, [1600, 2500], 2],
+	["brasilia", "asa-norte/", "sqn 116", 50, [1600, 2500], 2],
+	//["brasilia", "asa-norte/", "sqn 316", 50, [1600, 2300], 2],
 	//,["guara", "guara-i/", "", 50, [1200, 2000], 2]
 ];
 
- function filtroBusca(smItem){
+let finalResult = [];
+let parcialResult = [];
+let searchResult = [[], [], [], [], [], [], []];
+let lastSearch = [];
+let apData = [[], [], []];
+let counter = [30, 1];
+let lastResults = [];
+
+function dateNow(){
+	var today = new Date();
+	var date = `${today.getDate()}${today.getMonth() + 1}${today.getFullYear()}`;
+	var time = `${today.getHours()}${today.getMinutes()}`;
+	return date + time;
+}
+
+function filtroBusca(smItem){
+   console.log("🚀 ~ file: app.js ~ line 40 ~ filtroBusca ~ smItem", smItem)
    let filtro = {
 			local0: smItem[0],
 			local: smItem[1],
@@ -28,15 +47,8 @@ const searchModel = [
 			quartos: smItem[5],
 			maxPagina: 2,
 		};
-    console.log(
-			`Filtros da Busca:
-      .${filtro.local0}
-      .${filtro.local}
-      .${filtro.termos}
-      .${filtro.area}
-      .${filtro.valor}
-      .${filtro.quartos}
-      `
+		console.log(
+			`Filtros da Busca: .${filtro.local0} / .${filtro.local} / .${filtro.termos} / .${filtro.area} / .${filtro.valor} / .${filtro.quartos}`
 		);
   return filtro;
 };
@@ -58,7 +70,7 @@ function urlConstructor(filtros, value){
     `&ordenamento=menor-valor&pagina=${value}`
   ];
   return url.join("");
-}
+	}
 };
 
 function pagesCounter(value) {
@@ -75,17 +87,12 @@ function pagesCounter(value) {
   }
 }
 
-let finalResult = {};
-let parcialResult = {};
-let searchResult = [[], [], [], [], [], [], []];
-let apData = [[], [], []];
-let counter = [30, 1];
-let oldResult = [];
+
 
 async function scrape(urlFilter){
-  const browser = await puppeteer.launch({ headless: true });
+  const browser = await puppeteer.launch({ headless: true, slowMo:0, devtools: false });
   const page = await browser.newPage();
-	let sharedData;
+  let sharedUrl;
 
   await page.setViewport({
     width: 1280,
@@ -93,11 +100,14 @@ async function scrape(urlFilter){
     deviceScaleFactor: 1,
   });
 
-  page.setDefaultNavigationTimeout(80000);
+  page.setDefaultNavigationTimeout(120000);
 
   async function apPage(url) {
     //console.log(url.join(""));
-    await page.goto(url.join(""));
+    await page.goto(url.join(""), {
+			waitUntil: "load",
+			timeout: 0,
+		});
 
     const apResult = await page.evaluate(() => {
       const ap = [[], [], [],[]];
@@ -136,72 +146,87 @@ async function scrape(urlFilter){
   // quartos: document.querySelectorAll('.property__options>li[class=hide-mobile]').nextElementSibling.innerText
 
   async function scrapSearchData(url) {
+		let resultDescription;
     console.log(`
     URL base: '${url}
     `);
     await page.goto(url);
+		page.waitForNetworkIdle();
     //page.on("console", (log) => console[log._type](log._text));
+		if ((await page.$('.property-list > li > div[data-url]')) !== null) {
+			//const tst = await page.waitForSelector(".property-list__item:last-child div.property__image>img")
+			//await page.$eval(".property-list__item:last-child div.property__image>img",(e)=>{return e})
+			resultDescription = await page.evaluate(() => {
+				const locals = [],
+					aluguels = [],
+					areas = [],
+					quartos = [],
+					descricao = [],
+					urls = [],
+					imgs = [];
 
-    const resultDescription = await page.evaluate(() => {
-      const locals = [],
-        aluguels = [],
-        areas = [],
-        quartos = [],
-        descricao = [],
-        urls = [],
-        imgs = [];
+				//local: document.querySelectorAll('.property__title.endereco-mobile>a').innerText // regex /(\w+\s)?(\w+\s\w+)+(?=\\n)/g
+				document
+					.querySelectorAll(".property__title.endereco-mobile>a")
+					.forEach((local) =>
+						locals.push(
+							JSON.stringify(local.innerText).match(/(\w+\s)?(\w+\s\w+)(\s\w+)?/g)[0]
+						)
+					);
+				// aluguel: document.querySelectorAll('.property__subtitle.hide-mobile').children[1].innerText
+				document
+					.querySelectorAll(".property__subtitle.hide-mobile")
+					.forEach((valor) => aluguels.push(valor.children[1].innerText));
 
-      //local: document.querySelectorAll('.property__title.endereco-mobile>a').innerText // regex /(\w+\s)?(\w+\s\w+)+(?=\\n)/g
-      document
-        .querySelectorAll(".property__title.endereco-mobile>a")
-        .forEach((local) =>
-          locals.push(
-            JSON.stringify(local.innerText).match(/(\w+\s)?(\w+\s\w+)(\s\w+)?/g)[0]
-          )
-        );
-      // aluguel: document.querySelectorAll('.property__subtitle.hide-mobile').children[1].innerText
-      document
-        .querySelectorAll(".property__subtitle.hide-mobile")
-        .forEach((valor) => aluguels.push(valor.children[1].innerText));
+				// area: document.querySelectorAll('.property__options>li[class=hide-mobile]').innerText // regex /(\d{2} m²)/
+				document
+					.querySelectorAll(".property__options>li[class=hide-mobile]")
+					.forEach((area) => areas.push(area.innerText.match(/(\d{2} m²)/g)[0]));
 
-      // area: document.querySelectorAll('.property__options>li[class=hide-mobile]').innerText // regex /(\d{2} m²)/
-      document
-        .querySelectorAll(".property__options>li[class=hide-mobile]")
-        .forEach((area) => areas.push(area.innerText.match(/(\d{2} m²)/g)[0]));
+				// quartos: document.querySelectorAll('.property__options>li[class=hide-mobile]').nextElementSibling.innerText
+				document
+					.querySelectorAll(".property__options>li[class=hide-mobile]")
+					.forEach((quarto) => quartos.push(quarto.nextElementSibling.innerText));
 
-      // quartos: document.querySelectorAll('.property__options>li[class=hide-mobile]').nextElementSibling.innerText
-      document
-        .querySelectorAll(".property__options>li[class=hide-mobile]")
-        .forEach((quarto) => quartos.push(quarto.nextElementSibling.innerText));
+				// Descrição : document.querySelectorAll(".property-list > li > meta[itemprop=description]").content
+				document
+					.querySelectorAll(".property-list > li > meta[itemprop=description]")
+					.forEach((content) =>
+						descricao.push(
+							JSON.stringify(content.content).toLocaleLowerCase().replaceAll(/(\\n)?(")?/gm, ""))); //content.content;
 
-      // Descrição : document.querySelectorAll(".property-list > li > meta[itemprop=description]").content
-      document
-        .querySelectorAll(".property-list > li > meta[itemprop=description]")
-        .forEach((content) =>
-          descricao.push(
-            JSON.stringify(content.content).replaceAll(/(\\n)?(")?/gm, ""))); //content.content;
+				// url: document.querySelectorAll('.property-list > li > div[data-url').dataset.url `https://www.dfimoveis.com.br${}`
+				document
+					.querySelectorAll(".property-list > li > div[data-url]")
+					.forEach((url) => urls.push(url.dataset.url));
 
-      // url: document.querySelectorAll('.property-list > li > div[data-url').dataset.url `https://www.dfimoveis.com.br${}`
-      document
-        .querySelectorAll(".property-list > li > div[data-url]")
-        .forEach((url) => urls.push(url.dataset.url));
+				// imagem: document.querySelectorAll('div.property__image img[src]').currentSrc
+				document
+					.querySelectorAll(".property-list__item div.property__image>img[src]")
+					.forEach((img) => {
+						if (img.className == 'b-lazy')
+							imgs.push(img.dataset.src);
+						else
+							imgs.push(img.currentSrc);
+					}); //img.currentSrc or img.dataset.src
 
-      // imagem: document.querySelectorAll('div.property__image img[src]').currentSrc
-      document
-        .querySelectorAll("div.property__image img[src]")
-        .forEach((img) => imgs.push(img.currentSrc)); //img.currentSrc
+				return [locals, aluguels, areas, quartos, descricao, urls, imgs];
+			});
+			console.log(`${resultDescription[0].length} Apartamentos encontrados.`);
+			searchResult.forEach((array,i)=>{
+				array.push(...resultDescription[i])
+			})
+			lastSearch = resultDescription;
+			sharedUrl = resultDescription[5];
+		}else{
+			console.log(`0 Apartamentos encontrados.`);
+			sharedUrl = [];
+		}
 
-      return [locals, aluguels, areas, quartos, descricao, urls, imgs];
-    });
-    console.log(`${resultDescription[0].length} Apartamentos encontrados.`);
-    searchResult.forEach((array,i)=>{
-      array.push(...resultDescription[i])
-    })
-		sharedData = resultDescription[5]
   }
 
 	const scrapApData = async function () {
-		for (const data of sharedData) {
+		for (const data of sharedUrl) {
 			await apPage(urlConstructor(urlFilter, data));
 		}
 	};
@@ -215,77 +240,173 @@ async function scrape(urlFilter){
   browser.close();
 }
 
+
+
 function dataSync(){
   for (let index = 0; index < searchResult[0].length; index++) {
-				parcialResult[index + 1] = {
-					local: searchResult[0][index],
-					aluguel: searchResult[1][index],
-					area: searchResult[2][index],
-					quartos: searchResult[3][index],
-					descricao: searchResult[4][index],
-					url: searchResult[5][index],
-					img: searchResult[6][index],
-				};
-			}
+			parcialResult.push({
+				local: searchResult[0][index],
+				aluguel: searchResult[1][index],
+				area: searchResult[2][index],
+				quartos: searchResult[3][index],
+				descricao: searchResult[4][index],
+				url: searchResult[5][index],
+				img: searchResult[6][index],
+			});
+		}
+}
+
+function sumAndTotal(al,cd) {
+	let cnd = /(([0-9].)?[0-9]{3,4})/g.test(cd);
+	let alg = /(([0-9].)?[0-9]{3,4})/g.test(al);
+	if (cnd && alg) {
+		let sum = parseFloat(al.replace(".", "")) + parseFloat(cd.replace(".", ""));
+		return Intl.NumberFormat('de-DE').format(sum);
+	}
 }
 
 function addExtraData() {
 	for (let index = 0; index < searchResult[0].length; index++) {
-		parcialResult[index + 1] = {
-			...parcialResult[index + 1],
+		let totalValue = /(([0-9].)?[0-9]{3,4})/g.test(apData[1][index]) ? apData[1][index] : "000";
+		parcialResult[index] = {
+			...parcialResult[index],
 			descCompleta: apData[0][index],
-			condominio: apData[1][index],
+			condominio: totalValue,
+			total: sumAndTotal(
+				parcialResult[index].aluguel, totalValue
+			),
 			fotos: apData[2][index],
 		};
 	}
 }
 
-TODO: // implementar a verificação por duplicados e remover o item duplicado. iterar por array ou obj ?
-function findDup(items, itemCheck){
-	items.forEach((item,i)=>{
-			return item.url == itemCheck.url ? i : false;
-	})
-}
-//let index;
-//parcialResult.forEach((item, i)=>{
-//	index = findDup(finalResult, item) == false ? i : false;
-//}
-//parcialResult
-
-async function multipleSearch(searchModel) {
-  for (const search of searchModel) {
-    await scrape(filtroBusca(search)).then(() => {
-      dataSync();
-			addExtraData();
-			finalResult = {...finalResult, ...parcialResult}
-			parcialResult = {};
+function findDup(originalItems, checkItems) {
+	if (originalItems.length > 0) {
+		let dup = [];
+		Object.entries(originalItems).filter(([oIndex,oItem]) => {
+			checkItems.filter((cItem, cIndex) => {
+				if (cItem == oItem.url) {
+					dup.push([cItem,oIndex]);
+				}
+			});
 		});
-  }
-	console.log("Final...", finalResult);
-	return finalResult;
+		return dup;
+	}
+}
+function removeDuplicates(dups){
+	if (dups !== undefined && dups.length > 0) {
+		dups.forEach((remove) => {
+			delete finalResult[`${remove[1]}`];
+		});
+	}
+	finalResult = finalResult.filter((item) => {
+		return item !== undefined;
+	});
 }
 
-function timedSearch(time){
-	setInterval(multipleSearch(searchModel), 60 * 60 * 1000);
+function notifyNew(lasts){
+	let newAps = finalResult.slice(lasts);
+	bridge.TMsg(newAps);
+  console.log("🚀 ~ file: app.js ~ line 310 ~ notifyNew ~ newAps", newAps.length)
+	console.log("NOVO");
 }
 
-multipleSearch(searchModel)
+function addIfNew(){
+	let finalResultLength = finalResult.length;
+	let lastResultsLength = lastResults.length !== 0 ? lastResults[lastResults.length - 1].results.length : 0;
+	let lasts = lastResultsLength - finalResultLength;
+	console.log(finalResultLength, lastResultsLength, lasts);
+	if (lastResultsLength == 0 || finalResultLength >= lastResultsLength) {
+		lastResults.push({
+			date: dateNow(),
+			results: finalResult,
+		});
+		console.log("LR", );
+	}
+		console.log(finalResultLength, lastResultsLength, lasts);
 
-module.exports = {
-	'result': finalResult,
-	'getResult': ()=>{
-		return finalResult;
+	if (lasts >= 1){
+		notifyNew(lasts);
 	}
 }
 
-//DID:: juntar os itens de cada array em um objeto
-//DID:: se .length >30 adicionar nova pagina e refazer scraper dentro da função antes de retornar o resultado
-//DID:: pagecounter para controlar a definição de paginas
-//DID:: entrar na pagina de cada imóvel para pegar o valor do condominio e descrição completa
-//DID:: entrar na pagina de cada imóvel para pegar varias fotos
+function clearResults() {
+	parcialResult = [];
+	searchResult = [[], [], [], [], [], [], []];
+	lastSearch = [];
+	apData = [[], [], []];
+}
+
+async function multipleSearch(searchModel,onetime) {
+	clearResults();
+
+	if (onetime == 'onetime') {
+		await scrape(filtroBusca(searchModel)).then(() => {
+			dataSync();
+			addExtraData();
+		});
+		console.log("antiretorno", parcialResult);
+		return parcialResult;
+	} else {
+		for (const search of searchModel) {
+			await scrape(filtroBusca(search)).then(() => {
+				dataSync();
+				addExtraData();
+				if (lastSearch.length > 0)
+					removeDuplicates(findDup(finalResult, lastSearch[5]));
+				if (parcialResult.length > 0)
+					finalResult = [...finalResult, ...parcialResult];
+				clearResults();
+			});
+			console.log("Final...", finalResult.length);
+		}
+		addIfNew();
+	}
+}
+
+let searchFrequecny;
+function startTimedSearch(min){
+	searchFrequecny = setIntervalAsync(async()=>{
+		await multipleSearch(searchModel);
+	}, min * 1000);
+}
+startTimedSearch(3*60);
+
+async function unaTest(){
+	await multipleSearch(searchModel);
+}
+
+//unaTest()
+
+module.exports.getAps = async (filter)=>{
+	return await multipleSearch(filter, "onetime");
+}
+
+module.exports.getResult = ()=>{
+	return finalResult;
+}
+
+module.exports.lastResults = () => {
+	return lastResults;
+};
+
+
+//! TimeoutError: Timeout exceeded while waiting for event não tem a ver com o setTimeout inicial
+//FIXED está copiando o array de fotos das pesquisas anteriores.
+//DID: juntar os itens de cada array em um objeto
+//DID: se .length >30 adicionar nova pagina e refazer scraper dentro da função antes de retornar o resultado
+//DID: pagecounter para controlar a definição de paginas
+//DID: entrar na pagina de cada imóvel para pegar o valor do condominio e descrição completa
+//DID: entrar na pagina de cada imóvel para pegar varias fotos
+//DID: criar função para gerar diferentes urls para pesquisa sequencial
 //TODO: criar carrossel de fotos em modal
 //TODO: criar descrição completa em modal
-//TODO: criar função para gerar diferentes urls para pesquisa sequencial
-//TODO: criar intervalo de pesquisa automática
-//TODO: comparar com pesuisa anterior
-//TODO: enviar notificação de novo ap para o telegram
+//TODO: comparar com pesquisa anterior e salvar cumulativamente por data
+//DID: enviar notificação para telegram ao detectar novo ap que não existia antes
+//DID: endpoint para pesquisa em local específico, passando os filtros no pedido por telegram
+//TODO: criar skill alexa para notificação
+//DID: Sort by sum of condominio and aluguel
+//DID: tentar colocar o condominio depois de aluguel com desestruturação
+//DID: converter o objeto de listas para array e refatorar todo o código
+//DID: criar intervalo de pesquisa automática
+//TODO: criar métodos para adicionar novo site e novos queries de busca

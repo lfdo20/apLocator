@@ -1,12 +1,9 @@
 const express = require('express');
 const path = require('path');
-let finalResult = require('../app/app.js');
-//import { finalResult } from "../app/app.js";
-
+const apLocator = require('../app/app.js');
 const app = express();
 
-let resultado = finalResult;
-
+let resultado;
 
 app.use(express.static(path.join(__dirname, "../app")));
 
@@ -15,8 +12,13 @@ app.get("/", (req, res) => {
 });
 
 app.get("/data", (req, res) => {
-	resultado = finalResult.getResult();
+	resultado = apLocator.getResult();
   res.send(resultado);
+});
+
+app.get("/last", (req, res) => {
+	resultado = apLocator.lastResults();
+	res.send(resultado);
 });
 
 app.listen(process.env.PORT || 3000, () =>

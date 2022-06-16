@@ -16,6 +16,7 @@
     display: flex;
     flex-flow: row;
     justify-content: center;
+		align-items: center;
 }
 
 .aps{
@@ -27,7 +28,7 @@
 			margin: 6px;
 			border-radius: 0.6rem;
 			transition: box-shadow 300ms;
-			box-shadow: 0.2rem 0.3rem 0.6rem #bbb;
+			box-shadow: 0.2rem 0.3rem 0.6rem #bbbbbb;
 			-webkit-transition: box-shadow 300ms;
 			-moz-transition: box-shadow 300ms;
 			transition-property: box-shadow;
@@ -48,16 +49,25 @@
     width: 250px;
     margin: 15px;
     overflow: clip;
+		justify-content: center;
 }
 
 .fotSel {
+	display: none;
+}
 
+.fotSel:first-child {
+	display: flex;
 }
 
 .infos{
     width: auto;
     height: auto;
     margin: 6px;
+}
+
+.infos>span{
+	color: gray;
 }
 .descC{
 
