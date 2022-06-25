@@ -166,7 +166,10 @@ function pagesCounter(value) {
 }
 
 async function scrape(urlFilter){
-  const browser = await puppeteer.launch({ headless: true, slowMo:0, devtools: false });
+  const browser = await puppeteer.launch({
+		headless: true,
+		args: ["--no-sandbox", "--disable-setuid-sandbox"],
+	});
   const page = await browser.newPage();
   let sharedUrl;
 
@@ -448,7 +451,7 @@ function startTimedSearch(min){
 		await multipleSearch(searchModel);
 	}, min * 1000);
 }
-startTimedSearch(120); // 2*60
+startTimedSearch(2 * 60); // 2*60
 
 async function unaTest(){
 	setTimeout(()=>{multipleSearch(searchModel)},10000);
