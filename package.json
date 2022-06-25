@@ -6,7 +6,7 @@
   "scripts": {
     "test": "test",
     "run": "node ./app/app.js",
-    "start": "clear && node ./bin/server.js"
+    "start": "node ./bin/server.js"
   },
   "keywords": [
     "web",
