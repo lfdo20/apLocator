@@ -16,7 +16,7 @@ app.get("/data", (req, res) => {
   res.send(resultado);
 });
 
-app.get("/last", (req, res) => {
+app.get("/lasts", (req, res) => {
 	resultado = apLocator.lastResults();
 	res.send(resultado);
 });

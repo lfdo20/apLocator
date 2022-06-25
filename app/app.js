@@ -1,23 +1,40 @@
 const puppeteer = require('puppeteer');
 const { setIntervalAsync } = require("set-interval-async/fixed");
 const { clearIntervalAsync } = require("set-interval-async");
-const bridge = require('../bin/bot');
+const telegram = require('../bin/bot');
+require("dotenv").config();
+const { initializeApp } = require('firebase/app');
+const {	getDatabase, ref, set, get} = require("firebase/database");
 
+// Initialize Firebase
+const firebaseConfig = {
+	apiKey: process.env.API_KEY,
+	authDomain: process.env.AUTH_DOMAIN,
+	databaseURl: process.env.DATABASE_URL,
+	projectId: process.env.PROJECT_ID,
+	storageBucket: process.env.STORAGE_BUCKET,
+	messagingSenderId: "50933893203",
+	appId: process.env.APP_ID,
+};
+const app = initializeApp(firebaseConfig);
+
+// App Global Vars
 const filtroModel = {
-    local0:['brasilia','guara'],
-    local: ['asa-norte/', 'asa-sul/', 'guara-i/'],
-    termos: ['sqn', 'sqn 216', 'sqs', 'guara', 'shcgn',''],
-    area: [45, 50, 60, 70],
-    valor: [1800,2300],
-    quartos:[1,2]
+		local0:['brasilia','guara'],
+		local: ['asa-norte/', 'asa-sul/', 'guara-i/'],
+		termos: ['sqn', 'sqn 216', 'sqs', 'guara', 'shcgn',''],
+		area: [45, 50, 60, 70],
+		valor: [1800,2300],
+		quartos:[1,2]
 }
 
-const searchModel = [
-	["brasilia", "asa-norte/", "703", 50, [1600, 2500], 2],
-	//["brasilia", "asa-norte/", "sqn", 50, [1600, 2500], 2],
+let searchModel = [
+	["brasilia", "asa-norte/", "shcgn", 50, [1600, 2500], 2],
+	["brasilia", "asa-norte/", "sqn 216", 50, [1600, 2500], 2],
 	["brasilia", "asa-norte/", "sqn 416", 50, [1600, 2500], 2],
-	["brasilia", "asa-norte/", "sqn 116", 50, [1600, 2500], 2],
-	//["brasilia", "asa-norte/", "sqn 316", 50, [1600, 2300], 2],
+	["brasilia", "asa-norte/", "sqn 407", 50, [1600, 2500], 2],
+	["brasilia", "asa-norte/", "sqn 410", 50, [1600, 2500], 2],
+	["brasilia", "asa-norte/", "sqn 411", 50, [1600, 2500], 2],
 	//,["guara", "guara-i/", "", 50, [1200, 2000], 2]
 ];
 
@@ -28,16 +45,79 @@ let lastSearch = [];
 let apData = [[], [], []];
 let counter = [30, 1];
 let lastResults = [];
+let telegramUsers;
 
+// Firebase Save & Load
+function readData() {
+	const db = getDatabase(app);
+	get(ref(db, "lastResults/"))
+	.then((snapshot) => {
+		if (snapshot.exists()) {
+			lastResults = snapshot.val();
+			console.log('lastResults : ', lastResults.length);
+		} else {
+			console.log("No lastResults available");
+		}
+	})
+	.catch((error) => {
+		console.error(error);
+	});
+	get(ref(db, "searchModel/"))
+		.then((snapshot) => {
+			if (snapshot.exists()) {
+				searchModel = snapshot.val();
+				console.log("searchModel : ", searchModel);
+			} else {
+				console.log("No searchModel available");
+			}
+		})
+		.catch((error) => {
+			console.error(error);
+		});
+		get(ref(db, "users/"))
+			.then((snapshot) => {
+				if (snapshot.exists()) {
+					telegramUsers = snapshot.val();
+					console.log("telegramUsers : ", telegramUsers);
+				} else {
+					console.log("No users available");
+				}
+				//console.log(`Loaded: lastResults, users, searchModel`);
+			})
+			.catch((error) => {
+				console.error(error);
+			});
+}
+
+//INIT data load
+readData();
+
+function saveData() {
+	const db = getDatabase(app);
+	set(ref(db, 'lastResults/'), lastResults);
+	telegramUsers = telegram.TUsers();
+	set(ref(db, 'users/'), telegramUsers );
+	set(ref(db, "searchModel/"), searchModel);
+}
+
+process.on("SIGTERM", () => {
+	console.log("Salvando dados e finalizando bot..");
+	saveData(lastResults);
+	setTimeout(() => {
+		process.exit(0);
+	}, 7000);
+});
+
+
+// App Functions
 function dateNow(){
 	var today = new Date();
 	var date = `${today.getDate()}${today.getMonth() + 1}${today.getFullYear()}`;
-	var time = `${today.getHours()}${today.getMinutes()}`;
+	var time = `_${today.getHours()}${today.getMinutes()}`;
 	return date + time;
 }
 
 function filtroBusca(smItem){
-   console.log("🚀 ~ file: app.js ~ line 40 ~ filtroBusca ~ smItem", smItem)
    let filtro = {
 			local0: smItem[0],
 			local: smItem[1],
@@ -53,12 +133,10 @@ function filtroBusca(smItem){
   return filtro;
 };
 
-// https://www.dfimoveis.com.br/aluguel/df/brasilia/asa-norte/apartamento?palavrachave=sqn&quartosinicial=2
-// &quartosfinal=&valorinicial=1400&valorfinal=2400&areainicial=40&areafinal=&ordenamento=menor-valor&pagina=1
 function urlConstructor(filtros, value){
   if (value.length > 30) {
 		const url = [`https://www.dfimoveis.com.br${value}`];
-		console.log('Ap: ', url[0]);
+		console.log('Ap: ', value);
     return url;
   }else{
     const url = [
@@ -86,8 +164,6 @@ function pagesCounter(value) {
     return counter[0];
   }
 }
-
-
 
 async function scrape(urlFilter){
   const browser = await puppeteer.launch({ headless: true, slowMo:0, devtools: false });
@@ -305,23 +381,23 @@ function removeDuplicates(dups){
 }
 
 function notifyNew(lasts){
-	let newAps = finalResult.slice(lasts);
-	bridge.TMsg(newAps);
-  console.log("🚀 ~ file: app.js ~ line 310 ~ notifyNew ~ newAps", newAps.length)
-	console.log("NOVO");
+	let newAps = finalResult.slice(-lasts);
+	console.log("Novo Ap!", newAps.length);
+	telegram.TMsg(newAps);
 }
 
 function addIfNew(){
 	let finalResultLength = finalResult.length;
 	let lastResultsLength = lastResults.length !== 0 ? lastResults[lastResults.length - 1].results.length : 0;
-	let lasts = lastResultsLength - finalResultLength;
+	let lasts = finalResultLength - lastResultsLength;
 	console.log(finalResultLength, lastResultsLength, lasts);
-	if (lastResultsLength == 0 || finalResultLength >= lastResultsLength) {
+	if (lastResultsLength == 0 || finalResultLength > lastResultsLength) {
 		lastResults.push({
 			date: dateNow(),
 			results: finalResult,
 		});
-		console.log("LR", );
+		saveData(lastResults);
+		console.log("LR");
 	}
 		console.log(finalResultLength, lastResultsLength, lasts);
 
@@ -330,15 +406,17 @@ function addIfNew(){
 	}
 }
 
-function clearResults() {
+function clearResults(mod) {
 	parcialResult = [];
 	searchResult = [[], [], [], [], [], [], []];
 	lastSearch = [];
 	apData = [[], [], []];
+	if (mod == 'final')
+		finalResult = [];
 }
 
 async function multipleSearch(searchModel,onetime) {
-	clearResults();
+	clearResults('final');
 
 	if (onetime == 'onetime') {
 		await scrape(filtroBusca(searchModel)).then(() => {
@@ -370,10 +448,27 @@ function startTimedSearch(min){
 		await multipleSearch(searchModel);
 	}, min * 1000);
 }
-startTimedSearch(3*60);
+startTimedSearch(120); // 2*60
 
 async function unaTest(){
-	await multipleSearch(searchModel);
+	setTimeout(()=>{multipleSearch(searchModel)},10000);
+	setTimeout(()=>{
+		multipleSearch([
+			["brasilia", "asa-norte/", "705", 50, [1600, 2500], 2],
+		])},
+		40000
+	);
+	setTimeout(()=>{
+		multipleSearch([
+			["brasilia", "asa-norte/", "705", 50, [1600, 2500], 2],
+			["brasilia", "asa-norte/", "707", 50, [1600, 2500], 2],
+		]);},
+		60000
+	);
+	setTimeout(()=>{
+		multipleSearch([["brasilia", "asa-norte/", "shcgn", 50, [1600, 2500], 2]])},
+		80000
+	);
 }
 
 //unaTest()
@@ -390,9 +485,45 @@ module.exports.lastResults = () => {
 	return lastResults;
 };
 
+module.exports.listSearch = async ()=>{
+	const x = JSON.stringify(searchModel);
+	const t = x.match(/(((?<=(\],\[|\[\[)).{30,70}(?=(\]\]|\],\[))){1,6})/g);
+	return `${t.join("\r\n")}`;
+}
+
+module.exports.addSearch = async (location) =>{
+	searchModel.push(location);
+}
+
+module.exports.removeSearch = async (location)=>{
+
+	const remove = searchModel.findIndex((el,id)=>{
+		let trueCount = 0
+		for (let i = 0; i < searchModel[0].length; i++) {
+			let modEl = Array.isArray(el[i]) ? el[i].join() : el[i].toString();
+			let modLoc = Array.isArray(location[i]) ? location[i].join() : location[i].toString();
+			if (modLoc == modEl) {
+				trueCount += 1;
+			}
+			if (trueCount > 5) {
+				return id;
+			}
+		}
+	});
+	searchModel.splice(remove,1);
+}
+
+module.exports.saveData = ()=>{
+	return saveData();
+}
+module.exports.TUsersLoad = ()=>{
+	return telegramUsers;
+}
+
 
 //! TimeoutError: Timeout exceeded while waiting for event não tem a ver com o setTimeout inicial
 //FIXED está copiando o array de fotos das pesquisas anteriores.
+//! não crashar quando a busca excede o tempo e tentar novamente
 //DID: juntar os itens de cada array em um objeto
 //DID: se .length >30 adicionar nova pagina e refazer scraper dentro da função antes de retornar o resultado
 //DID: pagecounter para controlar a definição de paginas
@@ -401,12 +532,16 @@ module.exports.lastResults = () => {
 //DID: criar função para gerar diferentes urls para pesquisa sequencial
 //TODO: criar carrossel de fotos em modal
 //TODO: criar descrição completa em modal
-//TODO: comparar com pesquisa anterior e salvar cumulativamente por data
+//DID: comparar com pesquisa anterior e salvar cumulativamente por data
 //DID: enviar notificação para telegram ao detectar novo ap que não existia antes
 //DID: endpoint para pesquisa em local específico, passando os filtros no pedido por telegram
-//TODO: criar skill alexa para notificação
 //DID: Sort by sum of condominio and aluguel
 //DID: tentar colocar o condominio depois de aluguel com desestruturação
 //DID: converter o objeto de listas para array e refatorar todo o código
 //DID: criar intervalo de pesquisa automática
+//DID: save users do bot e searchqueries do app no firebase
+//TODO: criar skill alexa para notificação
 //TODO: criar métodos para adicionar novo site e novos queries de busca
+//DID: criar método para adicionar novo local para buca sequencial
+//TODO: reestruturar o addifnew(). Lógica por novos aps e não por lenght da lista de aps
+//TODO: checar cada um dos dados do ap para ver se teve variação, se sim, adicionar como novo e destacar a mudança
