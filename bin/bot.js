@@ -48,8 +48,36 @@ function sendWatchMessage(aps) {
 		}
 	}
 }
-bot.onText(/\/smg/, (msg, match) => {
-	sendWatchMessage();
+bot.onText(/(\/interval(\s)?)(\d{1,3})?/, (msg, match) => {
+	if (clearPolling(msg)) {
+		let id = msg.chat.id;
+		let resp;
+		if (match[3] !== Number) {
+			resp = apLocator.changeInterval(match[3]);
+		}else{
+			resp = `Formato: /interval XXX (Em minutos, até 3 digitos.)`;
+		}
+		bot.sendMessage(id, resp);
+	}
+});
+
+bot.onText(/\/help/, (msg, match) => {
+	if (clearPolling(msg)) {
+		let id = msg.chat.id;
+		let resp =
+		`
+		Comandos:
+		> /interval -- Configura intervalo de busca
+		> /startwatch -- Inicia notificação de novos aps
+		> /stopwatch -- Encerra notificação de novos aps
+		> /search -- Faz busca com um filtro de busca específico
+		> /listsearch -- Lista os filtros de busca sequencial
+		> /addsearch -- Adiciona novo filtro de busca sequencial
+		> /removesearch -- Remove filtro de busca sequencial
+		> /listsite -- Retorna o site com aps encontrados
+		`;
+		bot.sendMessage(id, resp);
+	}
 });
 
 bot.onText(/\/startwatch/, (msg, match) => {

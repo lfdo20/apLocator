@@ -45,23 +45,37 @@ let lastSearch = [];
 let apData = [[], [], []];
 let counter = [30, 1];
 let lastResults = [];
-let telegramUsers;
+let telegramUsers, searchFrequency;
+let searchInterval = 120 * 60;
 
 // Firebase Save & Load
-function readData() {
+async function readData() {
 	const db = getDatabase(app);
+	get(ref(db, "config/"))
+		.then((snapshot) => {
+			if (snapshot.exists()) {
+				let config = snapshot.val();
+				searchInterval = config.interval ;
+				console.log(`Config : interval : ${searchInterval}`);
+			} else {
+				console.log("No config available");
+			}
+		})
+		.catch((error) => {
+			console.error(error);
+		});
 	get(ref(db, "lastResults/"))
-	.then((snapshot) => {
-		if (snapshot.exists()) {
-			lastResults = snapshot.val();
-			console.log('lastResults : ', lastResults[lastResults.length-1].results.length);
-		} else {
-			console.log("No lastResults available");
-		}
-	})
-	.catch((error) => {
-		console.error(error);
-	});
+		.then((snapshot) => {
+			if (snapshot.exists()) {
+				lastResults = snapshot.val();
+				console.log('lastResults : ', lastResults[lastResults.length-1].results.length);
+			} else {
+				console.log("No lastResults available");
+			}
+		})
+		.catch((error) => {
+			console.error(error);
+		});
 	get(ref(db, "searchModel/"))
 		.then((snapshot) => {
 			if (snapshot.exists()) {
@@ -74,28 +88,29 @@ function readData() {
 		.catch((error) => {
 			console.error(error);
 		});
-		get(ref(db, "users/"))
-			.then((snapshot) => {
-				if (snapshot.exists()) {
-					telegramUsers = snapshot.val();
-					console.log("telegramUsers : ", telegramUsers);
-				} else {
-					telegramUsers = {};
-					console.log("No users available");
-				}
-				//console.log(`Loaded: lastResults, users, searchModel`);
-			})
-			.catch((error) => {
-				console.error(error);
-			});
+	await get(ref(db, "users/"))
+		.then((snapshot) => {
+			if (snapshot.exists()) {
+				telegramUsers = snapshot.val();
+				console.log("telegramUsers : ", telegramUsers);
+			} else {
+				telegramUsers = {};
+				console.log("No users available");
+			}
+			//console.log(`Loaded: lastResults, users, searchModel`);
+		})
+		.catch((error) => {
+			console.error(error);
+		});
 }
 
 //INIT data load
-readData();
+//readData();
 
 function saveData() {
 	const db = getDatabase(app);
 	set(ref(db, 'lastResults/'), lastResults);
+	set(ref(db, "config/"), {'interval': searchInterval});
 	telegramUsers = telegram.TUsers();
 	set(ref(db, 'users/'), telegramUsers );
 	set(ref(db, "searchModel/"), searchModel);
@@ -103,7 +118,7 @@ function saveData() {
 
 process.on("SIGTERM", () => {
 	console.log("Salvando dados e finalizando bot..");
-	saveData(lastResults);
+	saveData();
 	setTimeout(() => {
 		process.exit(0);
 	}, 7000);
@@ -443,13 +458,20 @@ async function multipleSearch(searchModel,onetime) {
 	}
 }
 
-let searchFrequecny;
 function startTimedSearch(min){
-	searchFrequecny = setIntervalAsync(async()=>{
+	console.log(`Iniciando buscas a cada ${min/60} minutos.`);
+	searchFrequency = setIntervalAsync(async()=>{
 		await multipleSearch(searchModel);
 	}, min * 1000);
 }
-startTimedSearch(2 * 20); // 2*60
+function stopTimedSearch(){
+	console.log(`Parando buscas.`);
+	clearIntervalAsync(searchFrequency);
+}
+
+readData().then(()=>{
+	startTimedSearch(searchInterval); // 2*60
+});
 
 async function unaTest(){
 	setTimeout(()=>{multipleSearch(searchModel)},10000);
@@ -494,6 +516,14 @@ module.exports.listSearch = async ()=>{
 
 module.exports.addSearch = async (location) =>{
 	searchModel.push(location);
+}
+
+module.exports.changeInterval = (min)=>{
+	stopTimedSearch();
+	searchInterval = min * 60;
+	saveData();
+	startTimedSearch(searchInterval);
+	return `Novo intervalo configurado.`;
 }
 
 module.exports.removeSearch = async (location)=>{
