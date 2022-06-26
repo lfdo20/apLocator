@@ -54,7 +54,7 @@ function readData() {
 	.then((snapshot) => {
 		if (snapshot.exists()) {
 			lastResults = snapshot.val();
-			console.log('lastResults : ', lastResults.length);
+			console.log('lastResults : ', lastResults[lastResults.length-1].results.length);
 		} else {
 			console.log("No lastResults available");
 		}
@@ -80,6 +80,7 @@ function readData() {
 					telegramUsers = snapshot.val();
 					console.log("telegramUsers : ", telegramUsers);
 				} else {
+					telegramUsers = {};
 					console.log("No users available");
 				}
 				//console.log(`Loaded: lastResults, users, searchModel`);
@@ -399,14 +400,12 @@ function addIfNew(){
 			date: dateNow(),
 			results: finalResult,
 		});
+		if (lasts >= 1){
+			notifyNew(lasts);
+		}
 		saveData(lastResults);
-		console.log("LR");
 	}
 		console.log(finalResultLength, lastResultsLength, lasts);
-
-	if (lasts >= 1){
-		notifyNew(lasts);
-	}
 }
 
 function clearResults(mod) {
@@ -426,7 +425,6 @@ async function multipleSearch(searchModel,onetime) {
 			dataSync();
 			addExtraData();
 		});
-		console.log("antiretorno", parcialResult);
 		return parcialResult;
 	} else {
 		for (const search of searchModel) {
@@ -451,7 +449,7 @@ function startTimedSearch(min){
 		await multipleSearch(searchModel);
 	}, min * 1000);
 }
-startTimedSearch(2 * 60); // 2*60
+startTimedSearch(2 * 20); // 2*60
 
 async function unaTest(){
 	setTimeout(()=>{multipleSearch(searchModel)},10000);

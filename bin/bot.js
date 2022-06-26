@@ -13,8 +13,8 @@ function clearPolling(msg){
 }
 
 async function sendApsMessage(aps, userChatId) {
-	await Promise.all(
-		aps.map(async (ap) => {
+	//await Promise.all(
+		for (const ap of aps) {
 			let msg =
 				`<b>${ap.local}</b>
 				.Area: ${ap.area}
@@ -29,8 +29,8 @@ async function sendApsMessage(aps, userChatId) {
 						parse_mode: 'HTML'
 					});
 				});
-		})
-	);
+		}
+	//);
 }
 function saveLoadUsers(mod) {
 	if (mod == 'load') {
@@ -48,6 +48,10 @@ function sendWatchMessage(aps) {
 		}
 	}
 }
+bot.onText(/\/smg/, (msg, match) => {
+	sendWatchMessage();
+});
+
 bot.onText(/\/startwatch/, (msg, match) => {
 	if (clearPolling(msg)) {
 		saveLoadUsers('load');
@@ -76,8 +80,9 @@ bot.onText(/\/stopwatch/, (msg, match) => {
 
 const regx =
 	/(\/search|\/addsearch|\/removesearch|\/listsearch|\/listsite)(\s(\w{4,8})\s(\w{3,6}-\w{1,8})\s((\w{2,8}\s?(\d{1,3})?)\s)?(\d{2,3})\s(\d{3,4})\s(\d{3,4})\s(\d))?/g;
-	bot.onText(regx, async (msg, txt) => {
-		if (clearPolling(msg)) {
+
+bot.onText(regx, async (msg, txt) => {
+	if (clearPolling(msg)) {
 		let filterArray = [];
 		let chatId = msg.chat.id;
 		let txtIdx =[3,4,6,8,9,10,11];
@@ -148,6 +153,9 @@ const regx =
 		}
 	}
 });
+
+bot.on("polling_error", console.log);
+
 module.exports.TMsg = (aps) => {
 	return sendWatchMessage(aps);
 };
