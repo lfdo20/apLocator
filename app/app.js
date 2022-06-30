@@ -181,8 +181,9 @@ function pagesCounter(value) {
   }
 }
 
+let browser;
 async function scrape(urlFilter){
-  const browser = await puppeteer.launch({
+  browser = await puppeteer.launch({
 		headless: true,
 		args: ["--no-sandbox", "--disable-setuid-sandbox"],
 	});
@@ -195,7 +196,7 @@ async function scrape(urlFilter){
     deviceScaleFactor: 1,
   });
 
-  page.setDefaultNavigationTimeout(120000);
+  page.setDefaultNavigationTimeout(12000);
 
   async function apPage(url) {
     //console.log(url.join(""));
@@ -461,7 +462,22 @@ async function multipleSearch(searchModel,onetime) {
 function startTimedSearch(min){
 	console.log(`Iniciando buscas a cada ${min/60} minutos.`);
 	searchFrequency = setIntervalAsync(async()=>{
-		await multipleSearch(searchModel);
+		let retries = 1;
+		console.log(`Começando buscas:`);
+		const exec = async()=>{
+			try {
+				return await multipleSearch(searchModel);
+			} catch (error) {
+				retries ++;
+				browser.close();
+				if (retries <= 5) {
+					console.log(`Erro, tentando ${retries}º vez`);
+					return exec();
+				}
+			}
+		}
+		return exec();
+
 	}, min * 1000);
 }
 function stopTimedSearch(){
@@ -470,7 +486,7 @@ function stopTimedSearch(){
 }
 
 readData().then(()=>{
-	startTimedSearch(searchInterval); // 2*60
+	startTimedSearch(searchInterval);
 });
 
 async function unaTest(){
