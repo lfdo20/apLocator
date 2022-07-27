@@ -6,6 +6,7 @@ const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token, {polling: true});
 
 let users = {};
+let tempChatId;
 
 function clearPolling(msg){
 	const check = Date.now() - msg.date * 1000 < 2000 ? true : false;
@@ -168,10 +169,16 @@ bot.onText(regx, async (msg, txt) => {
 					},
 					default: async () => {
 						const resp = `Ok, espere um pouco...`;
+						tempChatId = chatId;
 						bot.sendMessage(chatId, resp);
 
 						await apLocator.getAps(filterArray).then((aps) => {
-							sendApsMessage(aps, chatId);
+							if (aps.length == 0) {
+								const resp = `Essa pesquisa não teve nenhum resultado.`;
+								bot.sendMessage(chatId, resp);
+							} else {
+								sendApsMessage(aps, chatId);
+							}
 						});
 					},
 				};
@@ -185,6 +192,9 @@ bot.onText(regx, async (msg, txt) => {
 bot.on("polling_error", console.log);
 
 module.exports.TMsg = (aps) => {
+	if (aps.length == 31) {
+		return bot.sendMessage(tempChatId, aps);
+	}
 	return sendWatchMessage(aps);
 };
 

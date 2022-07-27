@@ -97,7 +97,6 @@ async function readData() {
 				telegramUsers = {};
 				console.log("No users available");
 			}
-			//console.log(`Loaded: lastResults, users, searchModel`);
 		})
 		.catch((error) => {
 			console.error(error);
@@ -182,7 +181,7 @@ function pagesCounter(value) {
 }
 
 let browser;
-async function scrape(urlFilter){
+async function scrape(urlFilter, mod){
   browser = await puppeteer.launch({
 		headless: true,
 		args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -308,7 +307,10 @@ async function scrape(urlFilter){
 
 				return [locals, aluguels, areas, quartos, descricao, urls, imgs];
 			});
-			console.log(`${resultDescription[0].length} Apartamentos encontrados.`);
+			if (mod == "onetime") {
+				let msg = `${resultDescription[0].length} Apartamento(s) encontrado(s).`;
+				telegram.TMsg(msg);
+			}
 			searchResult.forEach((array,i)=>{
 				array.push(...resultDescription[i])
 			})
@@ -401,7 +403,7 @@ function removeDuplicates(dups){
 }
 
 function notifyNew(lasts){
-	let newAps = finalResult.slice(-lasts);
+	let newAps = finalResult.slice(lasts);
 	console.log("Novo Ap!", newAps.length);
 	telegram.TMsg(newAps);
 }
@@ -433,15 +435,14 @@ function clearResults(mod) {
 		finalResult = [];
 }
 
-async function multipleSearch(searchModel,onetime) {
+async function multipleSearch(searchModel, onetime) {
 	clearResults('final');
 
 	if (onetime == 'onetime') {
-		await scrape(filtroBusca(searchModel)).then(() => {
+		await scrape(filtroBusca(searchModel),"onetime").then(() => {
 			dataSync();
 			addExtraData();
 		});
-		return parcialResult;
 	} else {
 		for (const search of searchModel) {
 			await scrape(filtroBusca(search)).then(() => {
@@ -513,7 +514,13 @@ async function unaTest(){
 //unaTest()
 
 module.exports.getAps = async (filter)=>{
-	return await multipleSearch(filter, "onetime");
+	return await multipleSearch(filter, "onetime").then(()=>{
+		if (parcialResult.length == 0) {
+			return [];
+		} else {
+			return parcialResult;
+		}
+	});
 }
 
 module.exports.getResult = ()=>{
@@ -568,9 +575,8 @@ module.exports.TUsersLoad = ()=>{
 }
 
 
-//! TimeoutError: Timeout exceeded while waiting for event não tem a ver com o setTimeout inicial
-//FIXED está copiando o array de fotos das pesquisas anteriores.
-//! não crashar quando a busca excede o tempo e tentar novamente
+//FIXED: está copiando o array de fotos das pesquisas anteriores.
+//FIXED: não crashar quando a busca excede o tempo e tentar novamente
 //DID: juntar os itens de cada array em um objeto
 //DID: se .length >30 adicionar nova pagina e refazer scraper dentro da função antes de retornar o resultado
 //DID: pagecounter para controlar a definição de paginas

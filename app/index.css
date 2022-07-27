@@ -1,12 +1,29 @@
+@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@1,600&family=IBM+Plex+Sans+Arabic:wght@300;400&display=swap');
+
 #all {
     display: flex;
     justify-content: left;
-    background: whitesmoke;
+    background: white;
     width: 100%;
     height: auto;
     flex-wrap: wrap;
+		max-width: 80%;
+		margin: 0px auto;
 }
 
+#title{
+	display: flex;
+	justify-content: left;
+	max-height: 150px;
+	margin: 20px;
+	width: 100%;
+	font-size: 80px;
+	color: #904B33;
+	font-family: 'Chakra Petch', sans-serif;
+}
+#title>text>span{
+	color: #71A334;
+}
 #all>div>div{
     display: flex;
     flex-flow: column;
@@ -20,12 +37,14 @@
 }
 
 .aps{
-    height: auto;
+    height: 228px;
     width: 100%;
     display: flex;
     flex-direction: row;
+		justify-content: space-around;
+		font-family: 'IBM Plex Sans Arabic', sans-serif;
 		border: 0px;
-			margin: 6px;
+			margin: 14px 6px;
 			border-radius: 0.6rem;
 			transition: box-shadow 300ms;
 			box-shadow: 0.2rem 0.3rem 0.6rem #bbbbbb;
@@ -41,6 +60,7 @@
 
 #baseImg{
     margin: 15px;
+		max-height: 200px;
 }
 
 .fotoCarr{
@@ -63,19 +83,19 @@
 .infos{
     width: auto;
     height: auto;
-    margin: 6px;
+		line-height: 22px;
+    margin: 4px;
 }
 
 .infos>span{
 	color: gray;
 }
-.descC{
 
-}
 .descS{
     margin: 15px;
     padding: 0px 25px;
     text-align: justify;
+		max-width: 624px;
 }
 .hide{
     display: none;
